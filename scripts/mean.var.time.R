@@ -127,6 +127,13 @@ df.means <- merge(df.meta.linear, mid.traits,
 nrow(df.means) #6272
 length(unique(df.means$tsID)) #407
 
+##### LOOK AT DATA ----
+#what is size range
+#what is time range
+#what is taxonomic range
+#what is geologic range
+
+
 ##### CALCULATE DISTANCE FROM MEAN -----
 #want smaller to be negative, so then trait_mean - tot.mean
 df.means$dist.mean = df.means$trait_mean - df.means$tot.mean
