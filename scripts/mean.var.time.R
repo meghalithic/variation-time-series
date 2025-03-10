@@ -28,6 +28,7 @@ require(reshape2)
 require(tidyr)
 require(ggplot2)
 require(paleoTS)
+require(scales)
 
 #### ENVIRONMENT ----
 # set to working directory
@@ -201,7 +202,7 @@ summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "pos",]
 #only slightly better, but drive by a few randos
 
 ## look at absolute distance
-ggplot(df.means.trim,
+glob.lm.p <- ggplot(df.means.trim,
        aes(abs.dist.mean, trait_var)) +
            #group = tsID, fill = tsID, col = tsID
            #fill = cat.dir, group = cat.dir, col = cat.dir
@@ -209,12 +210,21 @@ ggplot(df.means.trim,
     geom_smooth(method = "lm") +
     plot.theme + 
     scale_y_continuous(name = expression(log~Variation),
-                       trans = 'log') +
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x)))) +
     scale_x_continuous(name = expression(Distance~from~log~Mean),
-                       trans = 'log')
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x))))
+
 glob.lm = summary(lm(trait_var ~ abs.dist.mean, df.means.trim))
 #sig, tight slope, positive (0.4); 8% var explained
 #but we expect negative!!
+
+ggsave(glob.lm.p,
+       file = "results/figures/global.relationship.png",
+       width = 20, height = 10, units = "cm")
 
 df.means.trim$log.log.abs.dist.mean <- log(df.means.trim$abs.dist.mean)
 df.means.trim$log.log.var <- log(df.means.trim$trait_var)
@@ -275,7 +285,20 @@ stats.df$slope.min = stats.df$slope - stats.df$slope.se
 stats.df$slope.max = stats.df$slope + stats.df$slope.se
 stats.df$overlap.slope <- stats.df$slope.min <= glob.slope.min & stats.df$slope.max >= glob.slope.max
 
-write.csv(stats.df,
+glob.stats <- c("global", nrow(df.means.trim), 
+                max(df.means.trim$age_MY) - min(df.means.trim$age_MY),
+                mean(df.means.trim$tot.mean),
+                sum(stats.df$total_N),
+                glob.lm$coefficients[2], glob.lm$coefficients[4],
+                as.numeric(format(glob.lm$coefficients[8], scientific = FALSE)),
+                glob.lm$adj.r.squared, glob.lm$df[2],
+                as.numeric(format(glob.lm$coefficients[8], scientific = FALSE)) <= 0.005,
+                glob.slope.min, glob.slope.max,
+                glob.slope.min <= glob.slope.min & glob.slope.max >= glob.slope.max)
+
+stats.df.with.glob <- rbind(stats.df, glob.stats)
+
+write.csv(stats.df.with.glob,
           "results/slope.results.csv",
           row.names = FALSE)
 
