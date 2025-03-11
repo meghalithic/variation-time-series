@@ -476,6 +476,21 @@ ggplot(aes(abs.dist.mean, trait_var,
                        labels = trans_format('log', math_format(exp(.x))))
 #505 really stands out, only 6 time steps
 
+#what happens if remove these?
+df.means.trim2 <- df.means.trim[!(df.means.trim$tsID %in% chk.ts),]
+summary(lm(trait_var ~ abs.dist.mean, df.means.trim2))
+#slope the same....
+stats.df[stats.df$tsID == 644,]
+
+#which have the highest slopes?
+View(stats.df)
+#644
+#note: all the lower ones are similar
+#what happens when remove it?
+summary(lm(trait_var ~ abs.dist.mean, df.means.trim[df.means.trim$tsID != 644,]))
+#now it's .2
+mean(stats.df$slope[stats.df$tsID != 644]) #-0.00003
+
 ##### CI OF EACH TIME STEP -----
 #mean +/- z (1.96 for 95% CI) * sigma/sqrt(n)
 df.means.trim$sd <- sqrt(df.means.trim$trait_var)
@@ -564,12 +579,51 @@ write.csv(stats.ci.df.with.glob,
           row.names = FALSE)
 
 #how many overlap?
+nrow(stats.ci.df) #86
 nrow(stats.ci.df[stats.ci.df$overlap.slope == TRUE,])/nrow(stats.ci.df) #1% (even fewer!)
 #which are driving it?
 nrow(stats.ci.df[stats.ci.df$overlap.slope == TRUE,]) #1
 stats.ci.df$tsID[stats.ci.df$overlap.slope == TRUE] #78
 df.trim[df.trim$tsID == 78,]
 stats.ci.df[stats.ci.df$tsID == 78,] #nonsig
+
+#what happens when remove this one?
+df.trim2 <- df.trim[df.trim$tsID != 78,]
+summary(lm(trait_var ~ abs.dist.mean, df.trim2))
+#slope the same....
+
+ggplot(df.trim2,
+       aes(abs.dist.mean, trait_var)) +
+    #group = tsID, fill = tsID, col = tsID
+    #fill = cat.dir, group = cat.dir, col = cat.dir
+    geom_point() +
+    geom_smooth(aes(group = factor(tsID), col = factor(tsID), fill = factor(tsID)),
+                method = "lm") + 
+    plot.theme + 
+    geom_smooth(method = "lm", col = "black") +
+    scale_y_continuous(name = expression(log~Variation),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x)))) +
+    scale_x_continuous(name = expression(Distance~from~log~Mean),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x))))
+
+#which has athe highest var?
+which.max(df.trim$trait_var)
+df.trim[1647,] #tsID = 644
+
+#what happens when remove this one?
+df.trim3 <- df.trim[df.trim$tsID != 644,]
+summary(lm(trait_var ~ abs.dist.mean, df.trim3))
+#slope lower, now it's .23
+#what is the slope for 644?
+summary(lm(trait_var ~ abs.dist.mean, df.trim[df.trim$tsID == 644,]))
+#slope of 5
+#so it seems one is drive by 644
+
+mean(stats.ci.df$slope[stats.ci.df$tsID != 644]) #0.01, still lower than avg
 
 #### TESTING ----
 
