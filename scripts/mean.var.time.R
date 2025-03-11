@@ -36,7 +36,7 @@ require(scales)
 setwd("~/Documents/GitHub/megbalk/variation-time-series/")
 
 plot.theme <- theme(text = element_text(size = 16),
-                    legend.position = "none",
+                    #legend.position = "none",
                     panel.grid.major = element_blank(), 
                     panel.grid.minor = element_blank(),
                     panel.background = element_blank(), 
@@ -128,13 +128,6 @@ df.means <- merge(df.meta.linear, mid.traits,
 nrow(df.means) #6272
 length(unique(df.means$tsID)) #407
 
-##### LOOK AT DATA ----
-#what is size range
-#what is time range
-#what is taxonomic range
-#what is geologic range
-
-
 ##### CALCULATE DISTANCE FROM MEAN -----
 #want smaller to be negative, so then trait_mean - tot.mean
 df.means$dist.mean = df.means$trait_mean - df.means$tot.mean
@@ -165,9 +158,140 @@ df.means[df.means$tsID == 299,]
 #let's remove this for now
 df.means.trim <- df.means[df.means$tsID != 299,]
 
+#### LOOK AT DATA: SIZE ----
+#what is size range
+range(df.means.trim$trait_mean)
+size.p <- ggplot(mid.traits, 
+       aes(x = tot.mean)) +
+    geom_histogram(binwidth = .25) + 
+    plot.theme +
+    scale_x_continuous(name = expression(log~Mean)) +
+    scale_y_continuous(name = "Counts")
+
+ggsave(size.p,
+       file = "results/figures/size.hist.png",
+       width = 20, height = 10, units = "cm")
+
+#### LOOK AT DATA: TIME ----
+#sampling over time of all time series
+time.p <- ggplot(df.means.trim, 
+                 aes(x = age_MY)) +
+    geom_histogram() + 
+    plot.theme +
+    scale_x_continuous(name = "Age (MY)") +
+    scale_y_continuous(name = "Counts")
+
+ggsave(time.p,
+       file = "results/figures/time.hist.png",
+       width = 20, height = 10, units = "cm")
+
+#all geologic periods sampled
+##pie chart
+uni.df <- df.means.trim[!duplicated(df.means.trim$tsID),]
+
+geol.vec <- uni.df$epoch_start[uni.df$epoch_start == uni.df$epoch_end]
+star.geol.vec <- uni.df$epoch_start[uni.df$epoch_start != uni.df$epoch_end]
+end.geol.vec <- uni.df$epoch_end[uni.df$epoch_start != uni.df$epoch_end]
+
+length(uni.df$tsID[uni.df$epoch_start == "Miocene"
+                   & uni.df$epoch_end == "Pleistocene"])
+#need to add this many "Pliocene"
+
+length(uni.df$tsID[uni.df$epoch_start == "Pleistocene"
+                   & uni.df$epoch_end == "modern"])
+#need to add this many "Holocene"
+
+length(uni.df$tsID[uni.df$epoch_start == "Pliocene"
+                   & uni.df$epoch_end == "Holocene"])
+#need to add this many Pleistocene
+
+geol.vec2 <- c(geol.vec, star.geol.vec, end.geol.vec, 
+               rep("Pliocene", 6), rep("Holocene", 3), rep("Pleistocene", 1))
+
+#remove unknown
+#make modern and present the same
+geol.vec3 <- geol.vec2[geol.vec2 != "unknown"]
+geol.vec3[geol.vec3 == "present"] <- "modern"
+geol.vec3[geol.vec3 == "modern"] <- "Modern"
+geol.vec3[geol.vec3 == "llandovery"] <- "Llandovery"
+geol.vec3[geol.vec3 == "Upper-Cretaceaous"] <- "Late Cretaceous"
+geol.vec3[geol.vec3 == "Upper-Cretaceous"] <- "Late Cretaceous"
+geol.vec3[geol.vec3 == "Upper Cretaceous"] <- "Late Cretaceous"
+geol.vec3[geol.vec3 == "Middle-Jurassic"] <- "Middle Jurassic"
+
+per.stats <- as.data.frame(table(geol.vec3))
+colnames(per.stats) <- c("Period", "n")
+unique(per.stats$Period)
+per.stats$Period <- factor(per.stats$Period, 
+                           levels = c('Modern', 
+                                      'Holocene', 
+                                      'Pleistocene',
+                                      'Pliocene',
+                                      'Miocene',
+                                      'Oligocene',
+                                      'Eocene',
+                                      'Paleocene',
+                                      'Late Cretaceous',
+                                      'Middle Jurassic',
+                                      'Llandovery'))
+
+period.p <- ggplot(per.stats,
+                 aes(x = "", y = n,
+                     fill = Period)) +
+    geom_col(color = "black") +
+    coord_polar(theta = "y") +
+    plot.theme +
+    theme_void() +
+    geom_text(aes(label = n),
+              position = position_stack(vjust = 0.5))
+
+ggsave(period.p,
+       file = "results/figures/period.sampled.pie.png",
+       width = 20, height = 10, units = "cm")
+
+#time ranges of each time series
+#recreating total_MY since it doesn't seem to be in the metadata
+df.range <- df.means.trim %>%
+    group_by(tsID) %>%
+    summarise(time.range = max(age_MY)-min(age_MY))
+
+time.range.p <- ggplot(df.range, 
+                 aes(x = time.range)) +
+    geom_histogram() + 
+    plot.theme +
+    scale_x_continuous(name = "Time rage (MY)") +
+    scale_y_continuous(name = "Counts")
+
+ggsave(time.range.p,
+       file = "results/figures/time.range.hist.png",
+       width = 20, height = 10, units = "cm")
+
+#### LOOK AT DATA: TAXA ----
+#what is taxonomic range
+#pie chart
+taxa.stats <- df.means.trim[!duplicated(df.means.trim$tsID),] %>%
+    group_by(taxa) %>%
+    summarise(n = n())
+
+unique(taxa.stats$taxa)
+
+taxa.p <- ggplot(taxa.stats,
+       aes(x = "", y = n,
+           fill = taxa)) +
+    geom_col(color = "black") +
+    coord_polar(theta = "y") +
+    plot.theme +
+    theme_void() +
+    geom_text(aes(label = n),
+              position = position_stack(vjust = 0.5))
+
+ggsave(taxa.p,
+       file = "results/figures/taxa.pie.png",
+       width = 20, height = 10, units = "cm")
+    
 #### PLOTS ----
 
-## mean v var
+##### MEAN AND VARIANCE -----
 ggplot(df.means.trim,
        aes(trait_mean, trait_var)) +
     geom_point() + 
@@ -178,29 +302,7 @@ ggplot(df.means.trim,
 summary(lm(trait_var ~ trait_mean, df.means))
 #significant; slightly neg; explains almost none of var
 
-## distance from mean and variation
-# color coded by sample size
-ggplot(df.means.trim,
-       aes(dist.mean, trait_var)) +
-    geom_point(aes(fill = n.bin, col = n.bin, group = n.bin),
-               alpha = 0.5)
-#no trend
-
-## distance from mean and variation
-#group by if smaller or larger than mean
-ggplot(df.means.trim,
-       aes(dist.mean, trait_var,
-           group = cat.dir, fill = cat.dir, col = cat.dir)) +
-    geom_point() +
-    geom_smooth(method = "lm") +
-    plot.theme + 
-    scale_y_continuous(name = expression(log~Variation)) +
-    scale_x_continuous(name = expression(Distance~from~log~Mean))
-
-summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "neg",]))
-summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "pos",]))
-#only slightly better, but drive by a few randos
-
+##### VARIANCE AND DISTANCE FROM MEAN -----
 ## look at absolute distance
 glob.lm.p <- ggplot(df.means.trim,
        aes(abs.dist.mean, trait_var)) +
@@ -233,6 +335,23 @@ summary(lm(log.log.var ~ log.log.abs.dist.mean, df.means.trim))
 #if loglog it, then get more variance if go either way
 #so one step away from mean gives .5 inc in var
 
+##### DIRECTIONALITY -----
+## distance from mean and variation
+#group by if smaller or larger than mean
+ggplot(df.means.trim,
+       aes(dist.mean, trait_var,
+           group = cat.dir, fill = cat.dir, col = cat.dir)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    plot.theme + 
+    scale_y_continuous(name = expression(log~Variation)) +
+    scale_x_continuous(name = expression(Distance~from~log~Mean))
+
+summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "neg",]))
+summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "pos",]))
+#only slightly better, but drive by a few randos
+
+##### HOW MANY ARE REALLY FAR AWAY FROM MEAN? -----
 #how many are really far away from mean
 #here, really far is going to be more than 2 sigma (nb: var = sigma^2)
 #i am probably doing something wrong, but I'm going to just do:
@@ -256,7 +375,34 @@ ggplot(df.means.trim,
     scale_color_manual(values = far.col)
 #most are close to mean
 
-#### AVERAGE SLOPE ----
+## distance from mean and variation
+# color coded by sample size
+ggplot(df.means.trim,
+       aes(dist.mean, trait_var)) +
+    geom_point(aes(fill = n.bin, col = n.bin, group = n.bin),
+               alpha = 0.5)
+#no trend
+
+##### AVERAGE SLOPE -----
+ts.lm.p <- ggplot(df.means.trim,
+                    aes(abs.dist.mean, trait_var,
+                        group = tsID)) + #fill = tsID, col = tsID
+    geom_point() +
+    geom_smooth(method = "lm") +
+    plot.theme + 
+    scale_y_continuous(name = expression(log~Variation),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x)))) +
+    scale_x_continuous(name = expression(Distance~from~log~Mean),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x))))
+
+ggsave(ts.lm.p,
+       file = "results/figures/individ.relationship.png",
+       width = 20, height = 10, units = "cm")
+
 glob.lm$coefficients
 glob.slope.min = glob.lm$coefficients[2] - glob.lm$coefficients[4]
 glob.slope.max = glob.lm$coefficients[2] + glob.lm$coefficients[4]
@@ -304,6 +450,9 @@ write.csv(stats.df.with.glob,
 
 ## what percentage of slopes are around the global slope?
 nrow(stats.df[stats.df$overlap.slope == TRUE,])/nrow(stats.df) #5%
+
+##### CI OF EACH TIME STEP -----
+
 
 #### TESTING ----
 
