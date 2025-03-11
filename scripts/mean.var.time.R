@@ -135,7 +135,7 @@ df.means$dist.median = df.means$trait_mean - df.means$tot.median
 
 df.means$abs.dist.mean = abs(df.means$trait_mean - df.means$tot.mean)
 
-df.means <- mutate(df.means, n.bin = cut(N, breaks = c(0, 10, 100, 1000)))
+#df.means <- mutate(df.means, n.bin = cut(N, breaks = c(0, 10, 100, 1000)))
 
 df.means$cat.dir <- "neg"
 df.means$cat.dir[df.means$dist.mean > 0] <- "pos"
@@ -321,7 +321,7 @@ glob.lm.p <- ggplot(df.means.trim,
                        labels = trans_format('log', math_format(exp(.x))))
 
 glob.lm = summary(lm(trait_var ~ abs.dist.mean, df.means.trim))
-#sig, tight slope, positive (0.4); 8% var explained
+#sig, tight slope, positive (0.4 +/- 0.02); 8% var explained
 #but we expect negative!!
 
 ggsave(glob.lm.p,
@@ -349,7 +349,8 @@ ggplot(df.means.trim,
 
 summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "neg",]))
 summary(lm(trait_var ~ dist.mean, df.means.trim[df.means.trim$cat.dir == "pos",]))
-#only slightly better, but drive by a few randos
+#only slightly better for neg (11% var explained), seems to be driven by a few points
+#not better for pos (4% of var explained)
 
 ##### HOW MANY ARE REALLY FAR AWAY FROM MEAN? -----
 #how many are really far away from mean
@@ -374,14 +375,6 @@ ggplot(df.means.trim,
     scale_fill_manual(values = far.col) + 
     scale_color_manual(values = far.col)
 #most are close to mean
-
-## distance from mean and variation
-# color coded by sample size
-ggplot(df.means.trim,
-       aes(dist.mean, trait_var)) +
-    geom_point(aes(fill = n.bin, col = n.bin, group = n.bin),
-               alpha = 0.5)
-#no trend
 
 ##### AVERAGE SLOPE -----
 ts.lm.p <- ggplot(df.means.trim,
@@ -448,11 +441,135 @@ write.csv(stats.df.with.glob,
           "results/slope.results.csv",
           row.names = FALSE)
 
+mean(stats.df$slope) #0.02 
+#this is expected!
+#not close to the global slope
+#which are driving the trend?
+
 ## what percentage of slopes are around the global slope?
 nrow(stats.df[stats.df$overlap.slope == TRUE,])/nrow(stats.df) #5%
 
-##### CI OF EACH TIME STEP -----
+chk.ts <- stats.df$tsID[stats.df$overlap.slope == TRUE]
+chk.ts
+View(df.means.trim[df.means.trim$tsID %in% chk.ts,])
+View(stats.df[stats.df$overlap.slope == TRUE,])
+#all have huge errors around 0 except for three (460, 505, 550), only one of which is sig (460)
+#460 has A LOT of data
+mean(stats.df$total_N)
+#460 has 1332 N, which is near the mean, so not more than
+mean(stats.df$n.steps) #avg is 24, 460 has 26 and 505 has 6
 
+df.means.trim %>%
+    filter(tsID %in% chk.ts) %>%
+ggplot(aes(abs.dist.mean, trait_var,
+           group = factor(tsID), fill = factor(tsID), col = factor(tsID))) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    plot.theme + 
+    scale_y_continuous(name = expression(log~Variation),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x)))) +
+    scale_x_continuous(name = expression(Distance~from~log~Mean),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x))))
+#505 really stands out, only 6 time steps
+
+##### CI OF EACH TIME STEP -----
+#mean +/- z (1.96 for 95% CI) * sigma/sqrt(n)
+df.means.trim$sd <- sqrt(df.means.trim$trait_var)
+df.means.trim$ci.min <- df.means.trim$trait_mean - 1.96*(df.means.trim$sd/sqrt(df.means.trim$N))
+df.means.trim$ci.max <- df.means.trim$trait_mean + 1.96*(df.means.trim$sd/sqrt(df.means.trim$N))
+
+#Do these overlap with the tot mean?
+df.means.trim$overlap.mean <- df.means.trim$ci.min <= df.means.trim$tot.mean & df.means.trim$ci.max >= df.means.trim$tot.mean
+table(df.means.trim$overlap.mean) #50/50
+
+df.trim <- df.means.trim[df.means.trim$overlap.mean == FALSE,]
+samp.trim <- df.trim %>%
+    group_by(tsID) %>%
+    summarise(n = n())
+keep.ts <- samp.trim$tsID[samp.trim$n >= 6]
+df.trim <- df.trim[df.trim$tsID %in% keep.ts,]
+
+#now let's look at slopes
+glob.ci.lm.p <- ggplot(df.trim,
+                    aes(abs.dist.mean, trait_var)) +
+    #group = tsID, fill = tsID, col = tsID
+    #fill = cat.dir, group = cat.dir, col = cat.dir
+    geom_point() +
+    geom_smooth(method = "lm") +
+    plot.theme + 
+    scale_y_continuous(name = expression(log~Variation),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x)))) +
+    scale_x_continuous(name = expression(Distance~from~log~Mean),
+                       trans = 'log',
+                       breaks = trans_breaks('log', function(x) exp(x)),
+                       labels = trans_format('log', math_format(exp(.x))))
+
+glob.ci.lm = summary(lm(trait_var ~ abs.dist.mean, df.trim))
+#sig, tight slope, positive (0.4); 15% var explained
+#similar slope, more var explained (expected if removing noise)
+
+ggsave(glob.ci.lm.p,
+       file = "results/figures/global.ci.relationship.png",
+       width = 20, height = 10, units = "cm")
+
+glob.ci.lm$coefficients
+glob.ci.slope.min = glob.ci.lm$coefficients[2] - glob.ci.lm$coefficients[4]
+glob.ci.slope.max = glob.ci.lm$coefficients[2] + glob.ci.lm$coefficients[4]
+
+stats.ci.cols <- c("tsID", "n.steps", "age.range", "tot.mean", "total_N",
+                   "slope", "slope.se", "slope.p", "adj.r.sq", "df")
+stats.ci.df <- data.frame(matrix(ncol = length(stats.ci.cols), nrow = length(unique(df.trim$tsID))))
+colnames(stats.ci.df) <- stats.ci.cols
+for(i in 1:length(unique(df.trim$tsID))){
+    sub.df = df.trim[df.trim$tsID == unique(df.trim$tsID)[i],]
+    x <- summary(lm(trait_var ~ abs.dist.mean,
+                    sub.df))
+    stats.ci.df$tsID[i] = unique(sub.df$tsID)
+    stats.ci.df$n.steps[i] = nrow(sub.df)
+    stats.ci.df$age.range[i] = max(sub.df$age_MY) - min(sub.df$age_MY)
+    stats.ci.df$tot.mean[i] = unique(sub.df$tot.mean)
+    stats.ci.df$total_N[i] = unique(sub.df$total_N)
+    stats.ci.df$slope[i] = as.numeric(format(x$coefficients[2], scientific = FALSE))
+    stats.ci.df$slope.se[i] = as.numeric(format(x$coefficients[4], scientific = FALSE))
+    stats.ci.df$slope.p[i] = as.numeric(format(x$coefficients[8], scientific = FALSE))
+    stats.ci.df$adj.r.sq[i] = x$adj.r.squared
+    stats.ci.df$df[i] = x$df[2]
+}
+stats.ci.df$sig <- stats.ci.df$slope.p <= 0.005
+stats.ci.df$slope.min = stats.ci.df$slope - stats.ci.df$slope.se
+stats.ci.df$slope.max = stats.ci.df$slope + stats.ci.df$slope.se
+stats.ci.df$overlap.slope <- stats.ci.df$slope.min <= glob.ci.slope.min & stats.ci.df$slope.max >= glob.ci.slope.max
+
+glob.ci.stats <- c("global", nrow(df.trim), 
+                   max(df.trim$age_MY) - min(df.trim$age_MY),
+                   mean(df.trim$tot.mean),
+                   sum(stats.ci.df$total_N),
+                   glob.ci.lm$coefficients[2], glob.ci.lm$coefficients[4],
+                   as.numeric(format(glob.ci.lm$coefficients[8], scientific = FALSE)),
+                   glob.ci.lm$adj.r.squared, glob.ci.lm$df[2],
+                   as.numeric(format(glob.ci.lm$coefficients[8], scientific = FALSE)) <= 0.005,
+                   glob.ci.slope.min, glob.ci.slope.max,
+                   glob.ci.slope.min <= glob.ci.slope.min & glob.ci.slope.max >= glob.ci.slope.max)
+
+stats.ci.df.with.glob <- rbind(stats.ci.df, glob.ci.stats)
+
+write.csv(stats.ci.df.with.glob,
+          "results/slope.ci.results.csv",
+          row.names = FALSE)
+
+#how many overlap?
+nrow(stats.ci.df[stats.ci.df$overlap.slope == TRUE,])/nrow(stats.ci.df) #1% (even fewer!)
+#which are driving it?
+nrow(stats.ci.df[stats.ci.df$overlap.slope == TRUE,]) #1
+stats.ci.df$tsID[stats.ci.df$overlap.slope == TRUE] #78
+df.trim[df.trim$tsID == 78,]
+stats.ci.df[stats.ci.df$tsID == 78,] #nonsig
 
 #### TESTING ----
 
